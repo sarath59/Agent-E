@@ -8,7 +8,7 @@ from ae.config import SOURCE_LOG_FOLDER_PATH
 from ae.core.autogen_wrapper import AutogenWrapper
 from ae.utils.cli_helper import async_input  # type: ignore
 from ae.utils.logger import logger
-
+from ae.orchestration.orchestrate import get_orchestrator_response
 
 class SystemOrchestrator:
     """
@@ -18,13 +18,14 @@ class SystemOrchestrator:
     Attributes:
         agent_scenario (str): The agent scenario to use for command processing. Defaults to "user_proxy,browser_nav_agent".
         input_mode (str): The input mode of the system, determining whether command prompt input is enabled. Defaults to "GUI_ONLY".
+        orchestrate_mode (str): The orchestrate mode of the system, determining whether the system is using an orchestrator, so that not all queries are sent to the Agent-E (e.g personality queries can be handled elsewhere).
         browser_manager (PlaywrightManager): The Playwright manager instance for web interaction.
         autogen_wrapper (AutogenWrapper): The Autogen wrapper instance for agent-based command processing.
         is_running (bool): Flag indicating whether the system is currently processing a command.
         shutdown_event (asyncio.Event): Event to wait for an exit command to be processed.
     """
 
-    def __init__(self, agent_scenario:str="user_proxy,browser_nav_agent", input_mode:str="GUI_ONLY"):
+    def __init__(self, agent_scenario:str="user_proxy,browser_nav_agent", input_mode:str="GUI_ONLY", orchestrater_mode:bool=False):
         """
         Initializes the system orchestrator with the specified agent scenario and input mode.
 
@@ -34,6 +35,7 @@ class SystemOrchestrator:
         """
         self.agent_scenario = agent_scenario
         self.input_mode = input_mode
+        self.orchestrater_mode = orchestrater_mode
         self.browser_manager = None
         self.autogen_wrapper = None
         self.is_running = False
@@ -104,6 +106,24 @@ class SystemOrchestrator:
             return
 
         if command:
+            if self.orchestrater_mode:
+                #call orchestrator with command
+                logger.info(f"Calling Orchestartor to process the dommand: \"{command}")
+                orchestrator_response:dict[str,str] = get_orchestrator_response(command) # type: ignore
+                tool_recommended:str =orchestrator_response["tools"]
+                tool_answer:str =orchestrator_response["response"]
+                logger.info(f"Received Orchestartor to with tool recommendation: \"{tool_recommended}")
+                #call orchestrator
+                if tool_recommended.lower() !="agente": #type: ignore
+                    logger.info(f"Orchestartor tool recommendation is not agente, so not processing on agente")
+                    logger.info(f"Orchestartor response: {tool_answer}")
+                    await self.browser_manager.notify_user(f"{tool_recommended} : {tool_answer}.") # type: ignore
+                    # handle the reply from the orchestrator
+                    return
+                else:
+                    logger.info(f"Orchestartor tool recommendation is agente, continuing to process on agente")
+
+
             self.is_running = True
             start_time = time.time()
             current_url = await self.browser_manager.get_current_url() if self.browser_manager else None
@@ -127,7 +147,7 @@ class SystemOrchestrator:
         messages_str_keys = {str(key): value for key, value in messages.items()} # type: ignore
         with open(os.path.join(SOURCE_LOG_FOLDER_PATH, 'chat_messages.json'), 'w', encoding='utf-8') as f:
             json.dump(messages_str_keys, f, ensure_ascii=False, indent=4)
-        logger.debug("Chat messages saved")
+
 
     async def wait_for_exit(self):
         """
