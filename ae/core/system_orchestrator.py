@@ -108,13 +108,13 @@ class SystemOrchestrator:
         if command:
             if self.orchestrater_mode:
                 #call orchestrator with command
-                logger.info(f"Calling Orchestartor to process the dommand: \"{command}")
+                logger.info(f"Calling Orchestartor to process the dommand: {command}")
                 orchestrator_response:dict[str,str] = get_orchestrator_response(command) # type: ignore
                 tool_recommended:str =orchestrator_response["tools"]
                 tool_answer:str =orchestrator_response["response"]
-                logger.info(f"Received Orchestartor to with tool recommendation: \"{tool_recommended}")
+                logger.info(f"Received Orchestartor to with tool recommendation: {orchestrator_response}")
                 #call orchestrator
-                if tool_recommended.lower() !="agente": #type: ignore
+                if tool_recommended.lower() !="agente" or tool_recommended !=None: #type: ignore
                     logger.info(f"Orchestartor tool recommendation is not agente, so not processing on agente")
                     logger.info(f"Orchestartor response: {tool_answer}")
                     await self.browser_manager.notify_user(f"{tool_recommended} : {tool_answer}.") # type: ignore
@@ -122,7 +122,6 @@ class SystemOrchestrator:
                     return
                 else:
                     logger.info(f"Orchestartor tool recommendation is agente, continuing to process on agente")
-
 
             self.is_running = True
             start_time = time.time()
